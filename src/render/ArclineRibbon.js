@@ -43,8 +43,8 @@ void main() {
   float edge = smoothstep(0.0, 0.45, across);
 
   // Energy running along the line, toward the direction of travel.
-  float flow = fract(vDistance * 0.035 - uTime * 0.85);
-  float pulse = smoothstep(0.75, 1.0, flow) * 0.9 + 0.35;
+  float flow = fract(vDistance * 0.055 - uTime * 0.9);
+  float pulse = smoothstep(0.80, 1.0, flow) * 0.65 + 0.55;
 
   // A slower, wider swell so it breathes rather than strobes.
   float swell = 0.85 + sin(vDistance * 0.006 - uTime * 1.6) * 0.15;
@@ -100,7 +100,7 @@ export class ArclineRibbon {
       uniforms: {
         uColour: { value: new THREE.Color(colour) },
         uTime: { value: 0 },
-        uIntensity: { value: 2.6 },
+        uIntensity: { value: 1.9 },
       },
       vertexShader: VERTEX,
       fragmentShader: FRAGMENT,

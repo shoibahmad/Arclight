@@ -284,7 +284,7 @@ export class ShipVisual {
 
     // Thrusters: cones at the tail with a glow billboard in front of each.
     this.thrusters = [];
-    const thrusterMaterial = emissiveMaterial(colours.thruster, ghost ? 1 : 7);
+    const thrusterMaterial = emissiveMaterial(colours.thruster, ghost ? 1 : 4.5);
     for (const side of [-0.56, 0.56]) {
       const cone = new THREE.Mesh(
         new THREE.CylinderGeometry(0.22, 0.32, 1.3, 14, 1, true),
@@ -295,8 +295,8 @@ export class ShipVisual {
       this.group.add(cone);
 
       const flare = new THREE.Mesh(
-        new THREE.PlaneGeometry(2.1, 2.1),
-        glowMaterial(colours.thruster, ghost ? 0.6 : 3.4, { opacity })
+        new THREE.PlaneGeometry(1.25, 1.25),
+        glowMaterial(colours.thruster, ghost ? 0.5 : 1.8, { opacity })
       );
       flare.position.set(side * 0.62 * HULL_SCALE, -0.02, 3.35 * HULL_SCALE);
       this.group.add(flare);
@@ -320,9 +320,13 @@ export class ShipVisual {
     }
 
     // Underside glow: what makes it read as hovering rather than driving.
+    //
+    // Kept small and dim. It is an additive quad roughly the footprint of the
+    // craft, and at full strength eight of them seen from behind merge into a
+    // wall of colour across the bottom of the screen that reads as a bug.
     this.underglow = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.9, 5.8),
-      glowMaterial(colours.accent, ghost ? 0.3 : 1.5, { opacity: ghost ? 0.2 : 0.85 })
+      new THREE.PlaneGeometry(2.3, 4.4),
+      glowMaterial(colours.accent, ghost ? 0.2 : 0.55, { opacity: ghost ? 0.12 : 0.3 })
     );
     this.underglow.rotation.x = -Math.PI / 2;
     this.underglow.position.y = -0.62 * HULL_SCALE;
@@ -377,8 +381,8 @@ export class ShipVisual {
       const scale = (0.45 + this._thrusterLevel * 0.9) * flicker;
       cone.scale.set(1, scale * 1.5, 1);
       cone.position.z = (2.95 + scale * 0.45) * HULL_SCALE;
-      flare.scale.setScalar(0.55 + this._thrusterLevel * 1.15);
-      flare.material.opacity = this.ghost ? 0.25 : 0.55 + this._thrusterLevel * 0.45;
+      flare.scale.setScalar(0.5 + this._thrusterLevel * 0.8);
+      flare.material.opacity = this.ghost ? 0.2 : 0.4 + this._thrusterLevel * 0.4;
     }
 
     // Air brakes swing out to 55 degrees.
@@ -389,7 +393,7 @@ export class ShipVisual {
     }
 
     this.underglow.material.opacity =
-      (this.ghost ? 0.2 : 0.55) + clamp01(ship.speed01) * 0.35;
+      (this.ghost ? 0.1 : 0.2) + clamp01(ship.speed01) * 0.16;
 
     this.shield.visible = ship.shielding;
     if (ship.shielding) {
@@ -421,15 +425,29 @@ export class ShipVisual {
 /**
  * A ribbon of past positions behind the thrusters.
  *
- * Written as a ring buffer into a fixed geometry rather than rebuilt each
+ * Sampled by *distance travelled*, not by time. Sampling on a timer makes the
+ * trail's length proportional to speed — at 60Hz over 48 segments a craft at
+ * 110 m/s drags an eighty-metre banner, and eight of those additively blended
+ * bury the lower half of the screen. One sample every SPACING metres gives a
+ * wake that is the same length whatever the speed, which is also what a wake
+ * actually looks like.
+ *
+ * Written as a ring buffer into fixed geometry rather than rebuilt each
  * frame: with eight craft on track, reallocating a few hundred vertices per
  * craft per frame is exactly the kind of steady allocation that shows up as a
  * GC stutter a minute into a race.
  */
 class ThrusterTrail {
+  /** Metres between samples. segments * SPACING is the trail length. */
+  static SPACING = 0.85;
+
   constructor(colour, segments = 40) {
-    this.segments = segments;
-    this.width = 0.9;
+    // Cap the length in metres regardless of the quality preset's segment
+    // count; a higher preset should buy a smoother ribbon, not a longer one.
+    // 14 x 0.85m is about a twelve-metre wake. Longer than that and eight
+    // of them converging on the chase camera bury the road surface.
+    this.segments = Math.min(segments, 14);
+    this.width = 0.30;
     this.positions = new Float32Array(segments * 2 * 3);
     this.alphas = new Float32Array(segments * 2);
     this.history = [];
@@ -448,7 +466,7 @@ class ThrusterTrail {
     geometry.setDrawRange(0, 0);
 
     const material = new THREE.ShaderMaterial({
-      uniforms: { uColour: { value: new THREE.Color(colour).multiplyScalar(2.4) } },
+      uniforms: { uColour: { value: new THREE.Color(colour).multiplyScalar(0.5) } },
       vertexShader: `
         attribute float aAlpha;
         varying float vAlpha;
@@ -479,10 +497,9 @@ class ThrusterTrail {
   }
 
   update(dt, ship, level) {
-    this.timer += dt;
-    // Sample at a fixed rate so trail length is a distance, not a frame count.
-    const interval = 1 / 60;
-    if (this.timer < interval) return;
+    // Accumulate distance, not time.
+    this.timer += Math.abs(ship.speed) * dt;
+    if (this.timer < ThrusterTrail.SPACING) return;
     this.timer = 0;
 
     const back = _trailScratch
@@ -492,15 +509,15 @@ class ThrusterTrail {
     this.history.unshift({
       point: back.clone(),
       right: ship.right.clone(),
-      strength: level * clamp01(ship.speed01 * 1.4),
+      strength: level * clamp01((ship.speed01 - 0.08) * 1.6),
     });
     if (this.history.length > this.segments) this.history.pop();
 
     const count = this.history.length;
     for (let i = 0; i < count; i++) {
       const entry = this.history[i];
-      const fade = (1 - i / this.segments) ** 1.6 * entry.strength;
-      const halfWidth = this.width * (0.35 + fade * 0.65);
+      const fade = (1 - i / this.segments) ** 1.9 * entry.strength * 0.75;
+      const halfWidth = this.width * (0.3 + fade * 0.7);
       const base = i * 6;
       this.positions[base] = entry.point.x - entry.right.x * halfWidth;
       this.positions[base + 1] = entry.point.y - entry.right.y * halfWidth;

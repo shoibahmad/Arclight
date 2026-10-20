@@ -24,7 +24,10 @@ export class Hud {
     this.settings = settings;
     this.race = null;
     this.visible = false;
-    this._cache = new Map();
+    // Separate caches: one element could otherwise hold a string for its
+    // text and an object for its styles under the same key.
+    this._textCache = new Map();
+    this._styleCache = new Map();
     this._messageTimer = 0;
 
     root.innerHTML = TEMPLATE;
@@ -65,7 +68,8 @@ export class Hud {
   attach(race) {
     this.race = race;
     this._outline = race.track.minimapOutline(4);
-    this._cache.clear();
+    this._textCache.clear();
+    this._styleCache.clear();
     this._buildTower(race);
     this.el.lapTotal.textContent = String(race.director.totalLaps);
     this.el.positionTotal.textContent = String(race.ships.length);
@@ -108,18 +112,17 @@ export class Hud {
   /** Only touch the DOM when a value has actually changed. */
   _set(element, value) {
     if (!element) return;
-    if (this._cache.get(element) === value) return;
-    this._cache.set(element, value);
+    if (this._textCache.get(element) === value) return;
+    this._textCache.set(element, value);
     element.textContent = value;
   }
 
   _style(element, property, value) {
     if (!element) return;
-    const key = `${property}`;
-    const store = this._cache.get(element) ?? {};
-    if (store[key] === value) return;
-    store[key] = value;
-    this._cache.set(element, store);
+    let store = this._styleCache.get(element);
+    if (!store) this._styleCache.set(element, (store = {}));
+    if (store[property] === value) return;
+    store[property] = value;
     element.style.setProperty(property, value);
   }
 
