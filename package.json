@@ -13,6 +13,7 @@
     "serve": "node tools/serve.mjs",
     "test": "node --import ./tools/test/register.mjs --test \"tests/**/*.test.mjs\"",
     "test:smoke": "node tools/smoke-test.mjs",
-    "capture": "node tools/capture.mjs --serve"
+    "capture": "node tools/capture.mjs --serve",
+    "check": "node tools/check-imports.mjs"
   }
 }

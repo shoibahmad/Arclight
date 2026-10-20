@@ -44,6 +44,7 @@ export class Game {
     /** @type {Race|null} */
     this.race = null;
     this.paused = false;
+    this.loading = false;
     this.fade = 0;
     this.fadeTarget = 0;
     this.ready = false;
@@ -110,6 +111,31 @@ export class Game {
    *          laps?:number, opponents?:number, career?:object}} config
    */
   startRace(config) {
+    // Building a circuit is a few seconds of solid main-thread work —
+    // textures, a 25k-vertex terrain heightfield, and the scenery scatter.
+    // Done synchronously the player gets a frozen menu and assumes it hung,
+    // so the loading screen goes up and the build waits two frames for it to
+    // actually paint.
+    if (this.loading) return;
+    this.loading = true;
+    this.screens.show('loading', { trackId: config.trackId });
+
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        try {
+          this._buildRace(config);
+        } catch (error) {
+          console.error('[game] could not start the race', error);
+          this.loading = false;
+          this.showFatal(error);
+          return;
+        }
+        this.loading = false;
+      })
+    );
+  }
+
+  _buildRace(config) {
     this.endRace();
 
     const ghost =

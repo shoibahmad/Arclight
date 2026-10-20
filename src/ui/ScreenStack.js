@@ -359,6 +359,17 @@ const SCREENS = {
     };
   },
 
+  loading(game, stack, payload) {
+    const track = TRACKS[payload?.trackId];
+    return {
+      eyebrow: 'Loading',
+      title: track?.name ?? 'Loading',
+      subtitle: 'Generating circuit geometry, surfaces and scenery.',
+      items: [{ type: 'text', html: '<span class="loading-bar"><i></i></span>' }],
+      onBack: () => {},
+    };
+  },
+
   pause(game, stack) {
     return {
       eyebrow: 'Paused',

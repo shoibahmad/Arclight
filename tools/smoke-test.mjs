@@ -67,6 +67,12 @@ try {
       trackId: 'meridian', classId: 'sprint', shipId: 'kestrel',
       mode: 'race', opponents: 7, laps: 2, seed: 1234,
     });
+  `);
+  await page.waitFor('window.arclight.race && !window.arclight.loading', {
+    timeout: 90000,
+    label: 'the circuit to finish building',
+  });
+  await page.evaluate(`
     window.arclight.race.startImmediately();
     window.__probe = { maxSpeed: 0, nonFinite: 0, steps: 0 };
   `);
@@ -158,6 +164,147 @@ try {
       );
     }
   }
+
+  console.log('\ntime trial');
+  await page.evaluate('window.arclight.quitToMenu()');
+  await page.evaluate(`
+    window.arclight.profile.clearGhost('meridian', 'sprint');
+    window.arclight.startRace({
+      trackId: 'meridian', classId: 'sprint', shipId: 'vireo',
+      mode: 'timetrial', opponents: 0, laps: 2, seed: 77,
+    });
+  `);
+  await page.waitFor('window.arclight.race && !window.arclight.loading', { timeout: 90000 });
+  await page.evaluate('window.arclight.race.startImmediately()');
+  await page.evaluate(`
+    (async () => {
+      const { AIDriver } = await import('/src/game/AIDriver.js');
+      const race = window.arclight.race;
+      window.__pilot = new AIDriver(race.player, race.track, race.arcline, { skill: 0.95, seed: 4 });
+    })()
+  `);
+
+  // Two laps is enough to bank a ghost and then replay against it.
+  for (let i = 0; i < 60; i++) {
+    const done = await page.evaluate(`
+      (() => {
+        const race = window.arclight.race;
+        if (!race) return true;
+        const step = 1 / 120;
+        for (let k = 0; k < 480; k++) {
+          Object.assign(race.playerControls, window.__pilot.update(step, { rivals: race.ships }));
+          race.step(step);
+        }
+        return race.director.state === 'finished';
+      })()
+    `);
+    if (done) break;
+  }
+
+  const trial = await page.evaluate(`
+    (() => {
+      const game = window.arclight;
+      const ghost = game.profile.loadGhost('meridian', 'sprint');
+      const record = game.profile.getRecord('meridian', 'sprint');
+      return JSON.stringify({
+        hasGhost: !!ghost,
+        ghostFrames: ghost ? ghost.length : 0,
+        ghostLap: ghost ? ghost.lapTime : null,
+        bestLap: record ? record.bestLap : null,
+      });
+    })()
+  `).then(JSON.parse);
+
+  check(trial.hasGhost, 'ghost recorded and persisted', `${trial.ghostFrames} frames`);
+  check(
+    trial.ghostLap > 20 && trial.ghostLap < 200,
+    'ghost lap time is plausible',
+    `${(trial.ghostLap ?? 0).toFixed(2)}s`
+  );
+  check(trial.bestLap != null, 'best lap written to the profile', `${(trial.bestLap ?? 0).toFixed(2)}s`);
+
+  // Replay against the stored ghost and confirm the live delta works.
+  await page.evaluate('window.arclight.quitToMenu()');
+  await page.evaluate(`
+    window.arclight.startRace({
+      trackId: 'meridian', classId: 'sprint', shipId: 'vireo',
+      mode: 'timetrial', opponents: 0, laps: 2, seed: 78,
+    });
+  `);
+  await page.waitFor('window.arclight.race && !window.arclight.loading', { timeout: 90000 });
+  await page.evaluate(`
+    window.arclight.race.startImmediately();
+    (function () {
+      const race = window.arclight.race;
+      const step = 1 / 120;
+      for (let k = 0; k < 1200; k++) {
+        Object.assign(race.playerControls, { throttle: 1, brake: 0, steer: 0, airLeft: 0, airRight: 0, boost: false, shield: false });
+        race.step(step);
+      }
+    })();
+  `);
+  const ghostState = await page.evaluate(`
+    (() => {
+      const race = window.arclight.race;
+      const delta = race.ghostDelta();
+      return JSON.stringify({ loaded: !!race.ghost, delta, visible: !!race.ghostVisual });
+    })()
+  `).then(JSON.parse);
+  check(ghostState.loaded, 'ghost loaded for playback');
+  check(ghostState.visible, 'ghost craft created');
+  check(Number.isFinite(ghostState.delta), 'live ghost delta computed', `${(ghostState.delta ?? 0).toFixed(3)}s`);
+
+  console.log('\nchampionship');
+  await page.evaluate('window.arclight.quitToMenu()');
+  const cup = await page.evaluate(`
+    (async () => {
+      const game = window.arclight;
+      const { getCup } = await import('/src/data/championships.js');
+      const cupDef = getCup('proving');
+      const entrants = [{ id: 'player', name: 'YOU', isPlayer: true }];
+      for (let i = 0; i < 7; i++) entrants.push({ id: 'ai-' + i, name: 'AI ' + i, isPlayer: false });
+      game.profile.startCareer('proving', 'sprint', entrants);
+
+      // Apply two rounds of results without driving them.
+      const order = entrants.map((e) => ({ id: e.id }));
+      game.profile.applyRaceResult(order);
+      game.profile.applyRaceResult([...order].reverse());
+      const career = game.profile.career;
+      return JSON.stringify({
+        rounds: cupDef.tracks.length,
+        raceIndex: career.raceIndex,
+        topPoints: career.standings[0].points,
+        totalPoints: career.standings.reduce((a, s) => a + s.points, 0),
+        standings: career.standings.length,
+      });
+    })()
+  `).then(JSON.parse);
+
+  check(cup.raceIndex === 2, 'championship advanced two rounds', `index ${cup.raceIndex}`);
+  check(cup.standings === 8, 'championship tracks the whole field');
+  // 25+18+15+12+10+8+6+4 = 98 per round, two rounds.
+  check(cup.totalPoints === 196, 'points awarded correctly', `${cup.totalPoints} over 2 rounds`);
+  check(cup.topPoints >= 25, 'leader has points', `${cup.topPoints}`);
+
+  await page.evaluate(`
+    (() => {
+      const game = window.arclight;
+      game.profile.completeCup('proving', 'sprint', 1);
+      for (const [kind, ids] of Object.entries({ cups: ['nocturne'], tracks: ['lowtown', 'harbour'], ships: ['mantis'] })) {
+        for (const id of ids) game.profile.unlock(kind, id);
+      }
+    })()
+  `);
+  const unlocked = await page.evaluate(`
+    JSON.stringify({
+      cup: window.arclight.profile.has('cups', 'nocturne'),
+      track: window.arclight.profile.has('tracks', 'lowtown'),
+      ship: window.arclight.profile.has('ships', 'mantis'),
+      career: window.arclight.profile.career,
+    })
+  `).then(JSON.parse);
+  check(unlocked.cup && unlocked.track && unlocked.ship, 'cup win unlocks the next tier');
+  check(unlocked.career === null, 'career cleared after a completed cup');
 
   console.log('\nscreens');
   await page.evaluate('window.arclight.quitToMenu()');
