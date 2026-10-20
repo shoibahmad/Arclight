@@ -36,7 +36,7 @@ export const THEMES = {
     surfaces: {
       road: { base: 0x22252c, accent: 0x3a3630, seed: 11 },
       kerb: { a: 0xe4e0d4, b: 0xb8452f },
-      panel: { base: 0x4a4138, seed: 5 },
+      panel: { base: 0x5a5a56, seed: 5 },
       terrain: { style: 'rock', tint: 0x8a6243, seed: 3 },
     },
     /** Emissive trim colour: track edges, gate frames, boost pads. */

@@ -78,7 +78,14 @@ export class Browser {
     });
   }
 
-  static async launch({ width = 1280, height = 720, port = 9333, headless = true } = {}) {
+  static async launch({
+    width = 1280,
+    height = 720,
+    // Random by default: two capture runs in quick succession would otherwise
+    // collide on the debug port while the first browser is still shutting down.
+    port = 9400 + Math.floor(Math.random() * 400),
+    headless = true,
+  } = {}) {
     const binary = findBrowser();
     if (!binary) {
       throw new Error(
