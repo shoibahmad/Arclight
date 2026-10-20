@@ -1,0 +1,345 @@
+/* In-race HUD. Telemetry styling: condensed caps, tabular figures, thin rules. */
+
+.hud {
+  opacity: 0;
+  transition: opacity 280ms var(--ease-out);
+  font-family: var(--font-display);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.6);
+}
+
+.hud.is-visible {
+  opacity: 1;
+}
+
+.hud__corner {
+  position: absolute;
+  display: flex;
+  gap: 1.4rem;
+  padding: clamp(0.8rem, 2vw, 1.6rem);
+}
+
+.hud__corner--tl { top: 0; left: 0; }
+.hud__corner--tr { top: 0; right: 0; }
+.hud__corner--bl { bottom: 0; left: 0; }
+.hud__corner--br { bottom: 0; right: 0; flex-direction: column; align-items: flex-end; gap: 0.5rem; }
+
+.hud__label {
+  font-family: var(--font-data);
+  font-size: 0.6rem;
+  letter-spacing: 0.24em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+.hud__big {
+  font-size: clamp(1.8rem, 3.4vw, 2.6rem);
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.hud__big i {
+  font-style: normal;
+  font-size: 0.45em;
+  color: var(--ink-faint);
+  margin-left: 0.15em;
+}
+
+/* ------------------------------------------------------------- speed */
+
+.hud__speed {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.hud__speed b {
+  font-size: clamp(3rem, 7vw, 5.2rem);
+  line-height: 0.88;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.hud__speed span {
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  letter-spacing: 0.26em;
+  color: var(--ink-dim);
+}
+
+/* ------------------------------------------------------------ meters */
+
+.hud__meters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: min(280px, 34vw);
+}
+
+.meter {
+  display: grid;
+  grid-template-columns: 2.8rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.meter__label {
+  font-family: var(--font-data);
+  font-size: 0.56rem;
+  letter-spacing: 0.2em;
+  color: var(--ink-faint);
+}
+
+.meter__track {
+  height: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  position: relative;
+  /* Angled end: reads as instrumentation rather than a web progress bar. */
+  clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+}
+
+.meter__track > i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: background-color 200ms linear;
+}
+
+.meter--cell .meter__track > i {
+  background: linear-gradient(90deg, #1d7fa8, var(--accent));
+  box-shadow: 0 0 12px rgba(64, 224, 255, 0.5);
+}
+
+.meter--cell .meter__track > i.is-low {
+  background: linear-gradient(90deg, #9a3b1e, #ff8a3d);
+  box-shadow: 0 0 12px rgba(255, 138, 61, 0.6);
+}
+
+.meter--hull .meter__track > i {
+  background: linear-gradient(90deg, #3d7a5a, var(--good));
+}
+
+.meter--hull .meter__track > i.is-low {
+  background: linear-gradient(90deg, #8a2130, var(--danger));
+}
+
+.meter__value {
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  min-width: 2.2em;
+  text-align: right;
+}
+
+/* -------------------------------------------------------------- pips */
+
+.hud__pips {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.pip {
+  font-family: var(--font-data);
+  font-size: 0.56rem;
+  letter-spacing: 0.18em;
+  padding: 0.22rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--ink-faint);
+  transition: all 120ms linear;
+}
+
+.pip.is-active {
+  color: #04141a;
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 16px rgba(64, 224, 255, 0.6);
+}
+
+/* ------------------------------------------------------------ timing */
+
+.hud__timing {
+  position: absolute;
+  top: clamp(0.8rem, 2vw, 1.6rem);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 1.4rem;
+  align-items: baseline;
+  padding: 0.5rem 1.1rem;
+  background: linear-gradient(180deg, rgba(6, 10, 16, 0.76), rgba(6, 10, 16, 0.2));
+  border-top: 1px solid rgba(120, 170, 210, 0.25);
+}
+
+.hud__time {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  align-items: center;
+}
+
+.hud__time b {
+  font-size: 0.98rem;
+  font-weight: 500;
+}
+
+.hud__time--current b {
+  font-size: 1.3rem;
+  color: #fff;
+}
+
+.hud__delta {
+  font-size: 1.05rem;
+  min-width: 4.5em;
+  text-align: center;
+}
+
+.hud__delta.is-ahead { color: var(--good); }
+.hud__delta.is-behind { color: #ff7a6a; }
+
+.hud__gaps {
+  position: absolute;
+  top: 7.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2.4rem;
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+}
+
+.hud--timetrial .hud__gaps { display: none; }
+.hud--timetrial .hud__corner--tr { display: none; }
+
+/* ----------------------------------------------------- position tower */
+
+.tower {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 190px;
+}
+
+.tower__row {
+  display: grid;
+  grid-template-columns: 1.8rem 1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  background: rgba(6, 10, 16, 0.6);
+  font-size: 0.74rem;
+  border-left: 2px solid transparent;
+}
+
+.tower__row.is-player {
+  background: rgba(14, 40, 56, 0.85);
+  border-left-color: var(--accent);
+  color: #fff;
+}
+
+.tower__pos { color: var(--ink-faint); }
+.tower__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tower__gap { color: var(--ink-dim); font-size: 0.68rem; }
+
+/* ----------------------------------------------------------- minimap */
+
+.minimap {
+  width: 150px;
+  height: 150px;
+  opacity: 0.92;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
+}
+
+/* -------------------------------------------------- arcline indicator */
+
+.hud__line {
+  position: absolute;
+  bottom: clamp(0.8rem, 2vw, 1.6rem);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 160px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.hud__line::before {
+  /* Centre tick: the line itself. */
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -4px;
+  width: 1px;
+  height: 11px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.hud__line-glow {
+  position: absolute;
+  inset: -6px -10px;
+  background: radial-gradient(ellipse at center, rgba(64, 224, 255, 0.55), transparent 70%);
+  opacity: 0;
+  transition: opacity 120ms linear;
+  pointer-events: none;
+}
+
+.hud__line-mark {
+  position: absolute;
+  left: 50%;
+  top: -5px;
+  width: 3px;
+  height: 13px;
+  margin-left: -1.5px;
+  background: #fff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+}
+
+.hud__line.is-charging .hud__line-mark {
+  background: var(--accent);
+  box-shadow: 0 0 14px var(--accent);
+}
+
+/* --------------------------------------------------------- messaging */
+
+.hud__message,
+.hud__countdown {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.hud__message {
+  font-size: clamp(1.6rem, 4vw, 2.8rem);
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  opacity: 0;
+  transition: opacity 220ms var(--ease-out);
+}
+
+.hud__message.is-shown {
+  opacity: 1;
+}
+
+.hud__countdown {
+  font-size: clamp(4rem, 12vw, 9rem);
+  font-weight: 600;
+  opacity: 0;
+  color: #fff;
+  text-shadow: 0 0 50px rgba(255, 70, 70, 0.6);
+}
+
+.hud__countdown.is-shown {
+  opacity: 0.95;
+}
+
+@media (max-width: 760px) {
+  .hud__corner--tr,
+  .hud__gaps { display: none; }
+  .minimap { width: 104px; height: 104px; }
+}

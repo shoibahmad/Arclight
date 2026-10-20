@@ -66,7 +66,10 @@ for (const id of ids) {
   console.log(`  authored miss  ${report.rawGap.toFixed(1)} m`);
   console.log(`  residual gap   ${report.gap.toFixed(2)} m  (${gapPercent.toFixed(3)}% of lap)`);
   console.log(`  turn rescale   ${((report.turnScale - 1) * 100).toFixed(2)}%`);
-  console.log(`  straights moved up to ${(report.straightAdjust * 100).toFixed(1)}%${report.clamped ? ' (clamped)' : ''}`);
+  console.log(
+    `  adjusted       straights ${(report.straightAdjust * 100).toFixed(1)}%, ` +
+      `radii ${(report.radiusAdjust * 100).toFixed(1)}%${report.clamped ? ' (clamped)' : ''}`
+  );
   console.log(`  level drift    ${drift.toFixed(1)} m`);
   console.log(`  tightest R     ${tightest.toFixed(0)} m at ${tightestAt.toFixed(0)} m`);
   console.log(`  total climb    ${climb.toFixed(0)} m, steepest grade ${(maxGrade * 100).toFixed(1)}%`);

@@ -25,13 +25,18 @@ import { clamp, lerp, TAU, DEG } from '../core/MathUtil.js';
  * by nudging the straights.
  *
  * That second step is exact rather than approximate. Once the corner angles
- * are fixed, the heading of each straight is fixed too, so the finishing
- * position is a plain linear function of the straight lengths, and closing the
- * loop becomes a two-equation least-squares problem. Taking its minimum-norm
- * solution spreads the correction across every straight in proportion to how
- * much each one actually points along the gap. The corners keep exactly the
- * radius and banking they were authored with, which is what makes the circuit
- * still feel like the thing that was designed.
+ * are fixed, every segment's displacement is linear in one number — a
+ * straight in its length, an arc in its radius (the chord is
+ * 2R.sin(theta/2) along a fixed heading). So closing the loop is a
+ * two-equation least-squares problem over all of them at once, and the
+ * minimum-norm solution spreads the correction in proportion to how much
+ * each segment actually points along the gap.
+ *
+ * Straights are weighted far more heavily than radii, because lengthening a
+ * straight by 10% changes almost nothing about how a circuit drives while
+ * tightening a corner by 10% changes it a great deal. Corner *angles* are
+ * never touched after the heading pass, so the sequence of lefts and rights
+ * is exactly what was written down.
  */
 
 const NODE_SPACING = 32;
@@ -76,38 +81,55 @@ export function buildLayout(segments, options = {}) {
     );
   }
 
-  // Pass 2: a dry walk that records the heading of each straight and measures
-  // how far the authored lengths miss closure by.
-  const straightDirs = [];
-  const straightLengths = [];
+  // Pass 2: a dry walk recording how each segment's displacement responds to
+  // its one free number, and measuring how far the authored layout misses by.
+  const variables = [];
   let closureGap = [0, 0];
   {
     let yaw = heading * DEG;
     let x = 0;
     let z = 0;
-    for (const seg of segments) {
+    for (let index = 0; index < segments.length; index++) {
+      const seg = segments[index];
       if (seg.straight != null) {
-        straightDirs.push([Math.sin(yaw), Math.cos(yaw)]);
-        straightLengths.push(seg.straight);
+        // d(position)/d(length) is just the heading.
+        variables.push({
+          index,
+          kind: 'straight',
+          value: seg.straight,
+          dx: Math.sin(yaw),
+          dz: Math.cos(yaw),
+          maxFraction: 0.22,
+          min: 25,
+          weight: 1,
+        });
         x += Math.sin(yaw) * seg.straight;
         z += Math.cos(yaw) * seg.straight;
       } else {
         const angle = seg.turn * turnScale * DEG;
-        const steps = Math.max(2, Math.round((Math.abs(angle) * seg.radius) / nodeSpacing));
-        for (let i = 0; i < steps; i++) {
-          const dAngle = angle / steps;
-          const chord = 2 * seg.radius * Math.sin(Math.abs(dAngle) / 2);
-          const midYaw = yaw + dAngle / 2;
-          x += Math.sin(midYaw) * chord;
-          z += Math.cos(midYaw) * chord;
-          yaw += dAngle;
-        }
+        // The whole arc's chord is 2R.sin(|theta|/2) at the mean heading, so
+        // d(position)/d(radius) is that expression with R divided out.
+        const unitChord = 2 * Math.sin(Math.abs(angle) / 2);
+        const midYaw = yaw + angle / 2;
+        variables.push({
+          index,
+          kind: 'turn',
+          value: seg.radius,
+          dx: Math.sin(midYaw) * unitChord,
+          dz: Math.cos(midYaw) * unitChord,
+          maxFraction: 0.18,
+          min: 45,
+          weight: 0.3,
+        });
+        x += Math.sin(midYaw) * unitChord * seg.radius;
+        z += Math.cos(midYaw) * unitChord * seg.radius;
+        yaw += angle;
       }
     }
     closureGap = [x, z];
   }
 
-  const adjusted = solveStraightLengths(straightDirs, straightLengths, closureGap);
+  const adjusted = solveClosure(variables, closureGap);
 
   // Pass 3: walk the centreline for real, emitting nodes.
   const raw = [];
@@ -118,7 +140,6 @@ export function buildLayout(segments, options = {}) {
   let currentWidth = width;
   let currentBank = bank;
   let travelled = 0;
-  let straightIndex = 0;
 
   const push = (position, w, b, name, isCorner) => {
     raw.push({ position: position.clone(), width: w, bank: b, distance: travelled, name, isCorner });
@@ -131,7 +152,7 @@ export function buildLayout(segments, options = {}) {
     const rise = seg.rise ?? 0;
 
     if (seg.straight != null) {
-      const length = adjusted.lengths[straightIndex++];
+      const length = adjusted.values[segments.indexOf(seg)];
       if (!(length > 0)) throw new LayoutError(`straight must be positive, got ${length}`);
       const steps = Math.max(1, Math.round(length / nodeSpacing));
       const dx = Math.sin(yaw);
@@ -146,7 +167,7 @@ export function buildLayout(segments, options = {}) {
         push(cursor, lerp(currentWidth, endWidth, f), lerp(currentBank, endBank, f), seg.name, false);
       }
     } else if (seg.turn != null) {
-      const radius = seg.radius;
+      const radius = adjusted.values[segments.indexOf(seg)];
       if (!(radius > 0)) throw new LayoutError(`turn needs a positive radius, got ${radius}`);
       const angle = seg.turn * turnScale * DEG;
       const arc = Math.abs(angle) * radius;
@@ -195,7 +216,8 @@ export function buildLayout(segments, options = {}) {
     gap: gapLength,
     rawGap: Math.hypot(closureGap[0], closureGap[1]),
     turnScale,
-    straightAdjust: adjusted.maxFraction,
+    straightAdjust: adjusted.maxStraight,
+    radiusAdjust: adjusted.maxRadius,
     clamped: adjusted.clamped,
     nodeCount: raw.length,
   };
@@ -220,40 +242,44 @@ export function buildLayout(segments, options = {}) {
 }
 
 /**
- * Close the loop by adjusting the straights.
+ * Close the loop.
  *
- * `dirs` holds the unit heading of each straight, `lengths` their authored
- * lengths, `gap` the resulting miss. We want a change dL satisfying
- * `A dL = -gap`, where A is the 2xN matrix of headings. That is
- * underdetermined, so we take the minimum-norm solution,
- * `dL = -A^T (A A^T)^-1 gap`. A A^T is only 2x2, so it is a closed form
- * rather than an iterative solve.
+ * Each variable contributes `(dx, dz) * value` to the finishing position, so
+ * with A the 2xN matrix of those gradients we want a change dv satisfying
+ * `A dv = -gap`. That is underdetermined, and the minimum-norm solution is
+ * `dv = -A^T (A A^T)^-1 gap`, with A A^T only 2x2 — a closed form, not a
+ * search.
  *
- * Each straight is held to a maximum fractional change, so one short link
- * cannot be stretched into a different circuit. When the clamp bites, the
- * remainder is re-solved over the straights that are still free.
+ * Weights bias which variables absorb the error: substituting dv = W y and
+ * solving for the minimum-norm y means a variable with twice the weight moves
+ * four times as far. Straights carry weight 1 and corner radii 0.3, so a
+ * circuit is stretched rather than reshaped.
+ *
+ * Bounds are enforced by freezing any variable that hits its limit and
+ * re-solving over what is left.
  */
-function solveStraightLengths(dirs, lengths, gap, { maxFraction = 0.22, minLength = 25 } = {}) {
-  const n = dirs.length;
-  const result = lengths.slice();
-  if (n === 0) return { lengths: result, maxFraction: 0, clamped: false };
+function solveClosure(variables, gap) {
+  const n = variables.length;
+  const result = variables.map((v) => v.value);
+  if (n === 0) return { values: result, maxStraight: 0, maxRadius: 0, clamped: false };
 
   const free = new Array(n).fill(true);
   let residual = [gap[0], gap[1]];
   let clamped = false;
 
-  for (let pass = 0; pass < 4; pass++) {
+  for (let pass = 0; pass < 6; pass++) {
     let m00 = 0;
     let m01 = 0;
     let m11 = 0;
     for (let i = 0; i < n; i++) {
       if (!free[i]) continue;
-      m00 += dirs[i][0] * dirs[i][0];
-      m01 += dirs[i][0] * dirs[i][1];
-      m11 += dirs[i][1] * dirs[i][1];
+      const w = variables[i].weight * variables[i].weight;
+      m00 += variables[i].dx * variables[i].dx * w;
+      m01 += variables[i].dx * variables[i].dz * w;
+      m11 += variables[i].dz * variables[i].dz * w;
     }
     const det = m00 * m11 - m01 * m01;
-    if (Math.abs(det) < 1e-9) break; // every remaining straight points the same way
+    if (Math.abs(det) < 1e-9) break;
 
     const ix = (m11 * residual[0] - m01 * residual[1]) / det;
     const iz = (m00 * residual[1] - m01 * residual[0]) / det;
@@ -261,11 +287,12 @@ function solveStraightLengths(dirs, lengths, gap, { maxFraction = 0.22, minLengt
     let anyClamped = false;
     for (let i = 0; i < n; i++) {
       if (!free[i]) continue;
-      const delta = -(dirs[i][0] * ix + dirs[i][1] * iz);
-      const limit = lengths[i] * maxFraction;
+      const v = variables[i];
+      const delta = -(v.dx * ix + v.dz * iz) * v.weight * v.weight;
+      const limit = v.value * v.maxFraction;
       let next = result[i] + delta;
-      if (Math.abs(next - lengths[i]) > limit || next < minLength) {
-        next = Math.max(minLength, lengths[i] + Math.sign(delta) * limit);
+      if (Math.abs(next - v.value) > limit || next < v.min) {
+        next = Math.max(v.min, v.value + Math.sign(delta || 1) * limit);
         free[i] = false;
         anyClamped = true;
         clamped = true;
@@ -276,18 +303,26 @@ function solveStraightLengths(dirs, lengths, gap, { maxFraction = 0.22, minLengt
     let x = gap[0];
     let z = gap[1];
     for (let i = 0; i < n; i++) {
-      x += dirs[i][0] * (result[i] - lengths[i]);
-      z += dirs[i][1] * (result[i] - lengths[i]);
+      x += variables[i].dx * (result[i] - variables[i].value);
+      z += variables[i].dz * (result[i] - variables[i].value);
     }
     residual = [x, z];
     if (!anyClamped || Math.hypot(x, z) < 1e-4) break;
   }
 
-  let used = 0;
+  // Map back to a per-segment lookup, and report how hard each kind was bent.
+  const values = [];
+  let maxStraight = 0;
+  let maxRadius = 0;
   for (let i = 0; i < n; i++) {
-    used = Math.max(used, Math.abs(result[i] - lengths[i]) / lengths[i]);
+    const v = variables[i];
+    values[v.index] = result[i];
+    const moved = Math.abs(result[i] - v.value) / v.value;
+    if (v.kind === 'straight') maxStraight = Math.max(maxStraight, moved);
+    else maxRadius = Math.max(maxRadius, moved);
   }
-  return { lengths: result, maxFraction: used, clamped };
+
+  return { values, maxStraight, maxRadius, clamped };
 }
 
 /**
