@@ -55,6 +55,53 @@ export class Environment {
     scene.add(this.fill);
 
     this.shadowTexel = 1;
+    this.envMap = null;
+    this._pmrem = null;
+  }
+
+  /**
+   * Pre-filter the sky into an environment map.
+   *
+   * Without this every metal in the scene renders almost black. A metallic
+   * surface has no diffuse response at all — everything you see on it is
+   * reflected environment — so a PBR material at metalness 0.8 with nothing
+   * to reflect is, correctly and uselessly, a black object. One 256px cube
+   * capture of the sky dome at track load fixes the craft, the barriers and
+   * the road in a single stroke, and costs nothing per frame.
+   *
+   * @param {THREE.WebGLRenderer} renderer
+   */
+  buildEnvironmentMap(renderer) {
+    if (this.envMap) return this.envMap;
+    try {
+      this._pmrem = new THREE.PMREMGenerator(renderer);
+
+      // Capture the sky alone, from the origin. The dome is a unit sphere
+      // parked on the camera during play, so it has to be recentred first.
+      const previous = this.sky.mesh.position.clone();
+      this.sky.mesh.position.set(0, 0, 0);
+      this.sky.mesh.updateMatrix();
+      this.sky.mesh.matrixWorldNeedsUpdate = true;
+
+      const skyScene = new THREE.Scene();
+      skyScene.add(this.sky.mesh);
+      const target = this._pmrem.fromScene(skyScene, 0, 0.05, 10);
+      this.envMap = target.texture;
+
+      // Put the dome back where it belongs.
+      skyScene.remove(this.sky.mesh);
+      this.scene.add(this.sky.mesh);
+      this.sky.mesh.position.copy(previous);
+      this.sky.mesh.updateMatrix();
+
+      this.scene.environment = this.envMap;
+      // Slightly under 1: the generated sky is bright, and a full-strength
+      // ambient reflection washes out the directional key light.
+      this.scene.environmentIntensity = 0.65;
+    } catch (err) {
+      console.warn('[environment] could not build an environment map', err);
+    }
+    return this.envMap;
   }
 
   configureShadow() {
@@ -112,6 +159,9 @@ export class Environment {
   }
 
   dispose() {
+    this.scene.environment = null;
+    this.envMap?.dispose?.();
+    this._pmrem?.dispose?.();
     this.scene.remove(this.sky.mesh, this.hemi, this.sun, this.fill, this.sunTarget);
     this.sky.dispose();
     this.sun.dispose?.();

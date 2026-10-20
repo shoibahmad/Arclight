@@ -81,7 +81,7 @@ void main() {
   // normalize() here puts a sign flip through the middle of the screen, which
   // shows up as a hard vertical seam the moment the offset is big enough to
   // sample a different colour. Peaks at about one pixel in the corners.
-  float chromaAmount = uChroma * (0.0022 + uSpeed * 0.0085);
+  float chromaAmount = uChroma * (0.0013 + uSpeed * 0.0055);
 
   vec3 scene = vec3(0.0);
   float weightSum = 0.0;

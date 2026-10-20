@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Track } from '../track/Track.js';
 import { Arcline } from '../track/Arcline.js';
+import { Scenery } from '../track/Scenery.js';
 import { ArclineRibbon } from '../render/ArclineRibbon.js';
 import { Environment } from '../render/Environment.js';
 import { Ship } from './Ship.js';
@@ -60,6 +61,9 @@ export class Race {
     this.track = new Track(data);
     this.arcline = new Arcline(this.track, { seed: seed * 1013 });
     this.scene.add(this.track.group);
+
+    this.scenery = new Scenery(this.track);
+    this.scene.add(this.scenery.group);
 
     this.environment = new Environment(this.scene, this.track.theme, settings);
     this.ribbon = new ArclineRibbon(this.arcline, this.track.theme.accent);
@@ -314,6 +318,13 @@ export class Race {
   present(dt, viewport) {
     const player = this.player;
 
+    // The environment map needs a renderer, which the race does not own, so
+    // it is built on the first presented frame rather than in the constructor.
+    if (!this._envBuilt) {
+      this._envBuilt = true;
+      this.environment.buildEnvironmentMap(viewport.renderer);
+    }
+
     for (let i = 0; i < this.visuals.length; i++) {
       const ship = this.ships[i];
       const controls = ship.isPlayer
@@ -416,6 +427,7 @@ export class Race {
     this.ghostVisual?.removeFrom(this.scene);
     this.ghostVisual?.dispose();
     this.ribbon.dispose();
+    this.scenery.dispose();
     this.environment.dispose();
     this.track.dispose();
     this.scene.clear();

@@ -17,31 +17,57 @@ import { clamp, clamp01, damp, lerp } from '../core/MathUtil.js';
  * as exaggerated as they need to be without affecting how the craft drives.
  */
 
-/** Hull cross-section, normalised. Flat-bottomed, faceted top. */
+/**
+ * Hull cross-section, normalised.
+ *
+ * A hard chine at mid-height (the +/-1.0, 0.0 pair) rather than a rounded
+ * tube. That edge is what gives the craft a readable silhouette against a
+ * bright sky, and it is where the accent lighting runs.
+ */
 const SECTION = [
   [0.0, 1.0],
-  [0.62, 0.66],
-  [1.0, 0.1],
-  [0.78, -0.52],
-  [0.26, -0.78],
-  [-0.26, -0.78],
-  [-0.78, -0.52],
-  [-1.0, 0.1],
-  [-0.62, 0.66],
+  [0.55, 0.62],
+  [1.0, 0.0],
+  [0.72, -0.64],
+  [0.22, -1.0],
+  [-0.22, -1.0],
+  [-0.72, -0.64],
+  [-1.0, 0.0],
+  [-0.55, 0.62],
 ];
 
-/** Stations along the hull: [z, halfWidth, halfHeight, verticalOffset]. */
+/**
+ * Stations along the hull: [z, halfWidth, halfHeight, verticalOffset].
+ * Deliberately low and wide — about 2.2m across and 0.8m tall over 6m of
+ * length. A taller hull reads as a boat from the chase camera.
+ */
 const STATIONS = [
-  [-3.05, 0.1, 0.07, 0.02],
-  [-2.45, 0.42, 0.24, 0.0],
-  [-1.55, 0.76, 0.44, -0.02],
-  [-0.45, 1.0, 0.6, -0.02],
-  [0.65, 1.06, 0.63, 0.0],
-  [1.75, 0.96, 0.55, 0.04],
-  [2.7, 0.8, 0.44, 0.06],
+  [-3.2, 0.10, 0.05, 0.02],
+  [-2.5, 0.40, 0.17, 0.0],
+  [-1.5, 0.78, 0.30, -0.02],
+  [-0.4, 1.02, 0.38, -0.03],
+  [0.7, 1.08, 0.40, -0.02],
+  [1.8, 0.98, 0.34, 0.0],
+  [2.8, 0.76, 0.26, 0.02],
 ];
 
-const HULL_SCALE = 1.28;
+const HULL_SCALE = 1.04;
+
+/** Interpolate the hull's half-width and vertical offset at a given z. */
+function stationAt(z) {
+  if (z <= STATIONS[0][0]) return STATIONS[0];
+  const last = STATIONS[STATIONS.length - 1];
+  if (z >= last[0]) return last;
+  for (let i = 1; i < STATIONS.length; i++) {
+    const a = STATIONS[i - 1];
+    const b = STATIONS[i];
+    if (z <= b[0]) {
+      const t = (z - a[0]) / (b[0] - a[0]);
+      return [z, lerp(a[1], b[1], t), lerp(a[2], b[2], t), lerp(a[3], b[3], t)];
+    }
+  }
+  return last;
+}
 
 function loftHull(builder, stations, section, scale) {
   const rows = [];
@@ -104,15 +130,15 @@ function loftHull(builder, stations, section, scale) {
 /** A swept outboard pod, mirrored to both sides. */
 function buildPod(builder, side, scale) {
   const profile = [
-    [-1.3, -0.12, 0.26],
-    [-0.2, -0.16, 0.42],
-    [0.9, -0.14, 0.40],
-    [1.9, -0.06, 0.26],
+    [-1.1, -0.14, 0.13],
+    [-0.1, -0.17, 0.24],
+    [1.0, -0.15, 0.23],
+    [2.1, -0.07, 0.12],
   ];
   const rows = [];
   for (const [z, y, halfHeight] of profile) {
     const row = [];
-    const lateral = 1.18 + Math.abs(z) * 0.04;
+    const lateral = 1.02 + Math.abs(z) * 0.05;
     for (const [ox, oy] of [
       [0.0, 1.0],
       [0.85, 0.2],
@@ -121,7 +147,7 @@ function buildPod(builder, side, scale) {
       [-0.85, 0.2],
     ]) {
       row.push({
-        x: (lateral + ox * 0.34) * side * scale,
+        x: (lateral + ox * 0.26) * side * scale,
         y: (y + oy * halfHeight) * scale,
         z: z * scale,
       });
@@ -184,8 +210,8 @@ export class ShipVisual {
     this.hullMesh = new THREE.Mesh(
       hullBuilder.build({ name: 'hull' }),
       hullMaterial(colours.hull, {
-        roughness: 0.34,
-        metalness: 0.82,
+        roughness: 0.32,
+        metalness: 0.62,
         transparent: ghost,
         opacity,
         depthWrite: !ghost,
@@ -200,10 +226,10 @@ export class ShipVisual {
     loftHull(
       canopyBuilder,
       [
-        [-1.5, 0.08, 0.05, 0.52],
-        [-0.9, 0.34, 0.2, 0.5],
-        [0.1, 0.46, 0.26, 0.48],
-        [1.0, 0.36, 0.2, 0.44],
+        [-1.75, 0.06, 0.03, 0.34],
+        [-1.05, 0.30, 0.13, 0.33],
+        [-0.15, 0.40, 0.17, 0.32],
+        [0.75, 0.30, 0.12, 0.30],
       ],
       SECTION,
       HULL_SCALE
@@ -220,21 +246,31 @@ export class ShipVisual {
     this.canopy.castShadow = !ghost;
     this.group.add(this.canopy);
 
-    // Accent flashes along the shoulders.
+    // Accent strip along the chine.
+    //
+    // Sampled from the same station table as the hull, so it tapers with the
+    // nose instead of running at a constant width and projecting out in
+    // front of the craft — which is exactly what a fixed-width strip did.
     const trimBuilder = new MeshBuilder();
     for (const side of [-1, 1]) {
-      const z0 = -1.9 * HULL_SCALE;
-      const z1 = 2.2 * HULL_SCALE;
-      const x = side * 0.96 * HULL_SCALE;
-      const yTop = 0.3 * HULL_SCALE;
-      const yBottom = 0.16 * HULL_SCALE;
-      const n = new THREE.Vector3(side, 0.45, 0).normalize();
-      const a = trimBuilder.vertex(x, yTop, z0, n.x, n.y, n.z, 0, 0);
-      const b = trimBuilder.vertex(x * 1.05, yBottom, z0, n.x, n.y, n.z, 1, 0);
-      const c = trimBuilder.vertex(x * 1.05, yBottom, z1, n.x, n.y, n.z, 1, 1);
-      const d = trimBuilder.vertex(x, yTop, z1, n.x, n.y, n.z, 0, 1);
-      if (side > 0) trimBuilder.quad(a, b, c, d);
-      else trimBuilder.quad(d, c, b, a);
+      const rows = [];
+      for (let z = -2.3; z <= 2.75; z += 0.42) {
+        const [, halfWidth, halfHeight, offsetY] = stationAt(z);
+        const x = side * halfWidth * HULL_SCALE * 1.012;
+        const y = offsetY * HULL_SCALE;
+        const thickness = halfHeight * HULL_SCALE * 0.22;
+        const n = new THREE.Vector3(side, 0.25, 0).normalize();
+        rows.push([
+          trimBuilder.vertex(x, y + thickness, z * HULL_SCALE, n.x, n.y, n.z, 0, z),
+          trimBuilder.vertex(x, y - thickness, z * HULL_SCALE, n.x, n.y, n.z, 1, z),
+        ]);
+      }
+      for (let i = 0; i < rows.length - 1; i++) {
+        const [a, b] = rows[i];
+        const [c, d] = rows[i + 1];
+        if (side > 0) trimBuilder.quad(a, b, d, c);
+        else trimBuilder.quad(c, d, b, a);
+      }
     }
     this.trim = new THREE.Mesh(
       trimBuilder.build({ name: 'trim' }),
@@ -251,18 +287,18 @@ export class ShipVisual {
     const thrusterMaterial = emissiveMaterial(colours.thruster, ghost ? 1 : 7);
     for (const side of [-0.56, 0.56]) {
       const cone = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.28, 0.4, 1.5, 14, 1, true),
+        new THREE.CylinderGeometry(0.22, 0.32, 1.3, 14, 1, true),
         thrusterMaterial
       );
       cone.rotation.x = Math.PI / 2;
-      cone.position.set(side * HULL_SCALE, 0.02, 3.1 * HULL_SCALE);
+      cone.position.set(side * 0.62 * HULL_SCALE, -0.02, 2.95 * HULL_SCALE);
       this.group.add(cone);
 
       const flare = new THREE.Mesh(
         new THREE.PlaneGeometry(2.1, 2.1),
         glowMaterial(colours.thruster, ghost ? 0.6 : 3.4, { opacity })
       );
-      flare.position.set(side * HULL_SCALE, 0.02, 3.6 * HULL_SCALE);
+      flare.position.set(side * 0.62 * HULL_SCALE, -0.02, 3.35 * HULL_SCALE);
       this.group.add(flare);
       this.thrusters.push({ cone, flare, side });
     }
@@ -271,9 +307,9 @@ export class ShipVisual {
     this.flaps = [];
     for (const side of [-1, 1]) {
       const pivot = new THREE.Object3D();
-      pivot.position.set(side * 1.36 * HULL_SCALE, 0.1, 1.5 * HULL_SCALE);
+      pivot.position.set(side * 1.14 * HULL_SCALE, 0.02, 1.4 * HULL_SCALE);
       const flap = new THREE.Mesh(
-        new THREE.BoxGeometry(0.1, 0.62, 1.5),
+        new THREE.BoxGeometry(0.08, 0.46, 1.25),
         hullMaterial(colours.trim, { roughness: 0.5, metalness: 0.6, transparent: ghost, opacity })
       );
       flap.position.set(0, 0, 0.35);
@@ -285,16 +321,16 @@ export class ShipVisual {
 
     // Underside glow: what makes it read as hovering rather than driving.
     this.underglow = new THREE.Mesh(
-      new THREE.PlaneGeometry(3.4, 6.4),
+      new THREE.PlaneGeometry(2.9, 5.8),
       glowMaterial(colours.accent, ghost ? 0.3 : 1.5, { opacity: ghost ? 0.2 : 0.85 })
     );
     this.underglow.rotation.x = -Math.PI / 2;
-    this.underglow.position.y = -0.95 * HULL_SCALE;
+    this.underglow.position.y = -0.62 * HULL_SCALE;
     this.group.add(this.underglow);
 
     // Shield bubble, shown only while the shield is drawing power.
     this.shield = new THREE.Mesh(
-      new THREE.SphereGeometry(3.2, 20, 14),
+      new THREE.SphereGeometry(2.9, 20, 14),
       glowMaterial(colours.accent, 1.1, { opacity: 0, side: THREE.BackSide })
     );
     this.shield.scale.set(1, 0.52, 1.25);
@@ -340,7 +376,7 @@ export class ShipVisual {
     for (const { cone, flare } of this.thrusters) {
       const scale = (0.45 + this._thrusterLevel * 0.9) * flicker;
       cone.scale.set(1, scale * 1.5, 1);
-      cone.position.z = (3.1 + scale * 0.5) * HULL_SCALE;
+      cone.position.z = (2.95 + scale * 0.45) * HULL_SCALE;
       flare.scale.setScalar(0.55 + this._thrusterLevel * 1.15);
       flare.material.opacity = this.ghost ? 0.25 : 0.55 + this._thrusterLevel * 0.45;
     }
@@ -451,7 +487,7 @@ class ThrusterTrail {
 
     const back = _trailScratch
       .copy(ship.position)
-      .addScaledVector(ship.forward, -3.6)
+      .addScaledVector(ship.forward, -3.2)
       .addScaledVector(ship.up, 0.05);
     this.history.unshift({
       point: back.clone(),
