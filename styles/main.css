@@ -1,0 +1,194 @@
+/* Global shell: page chrome, boot sequence, shared typography and tokens. */
+
+:root {
+  --bg: #05070b;
+  --ink: #e8eef7;
+  --ink-dim: #93a2b8;
+  --ink-faint: #5a6678;
+  --accent: #40e0ff;
+  --accent-warm: #ffb347;
+  --danger: #ff4d5e;
+  --good: #52e39b;
+  --panel: rgba(10, 15, 23, 0.82);
+  --panel-edge: rgba(120, 160, 200, 0.22);
+  --panel-edge-hot: rgba(64, 224, 255, 0.55);
+
+  --font-display: 'Bahnschrift', 'DIN Alternate', 'Oswald', 'Arial Narrow', system-ui, sans-serif;
+  --font-ui: 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif;
+  --font-data: ui-monospace, 'Cascadia Mono', 'SF Mono', Consolas, 'Liberation Mono', monospace;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  /* A racing game should never show a text caret or a blue drag highlight. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  /* Pointer is hidden during a race; the class is toggled from Game.js. */
+  cursor: default;
+}
+
+body.is-driving {
+  cursor: none;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  display: block;
+}
+
+#viewport {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+.screens,
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.screens > * {
+  pointer-events: auto;
+}
+
+/* ------------------------------------------------------------------ boot */
+
+.boot {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 1.6rem;
+  background: radial-gradient(ellipse at 50% 45%, #0d1420 0%, #05070b 70%);
+  z-index: 100;
+  transition: opacity 600ms var(--ease-out);
+}
+
+.boot.is-done {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.boot__mark {
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 7vw, 5rem);
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  font-weight: 600;
+  color: var(--ink);
+  text-shadow: 0 0 36px rgba(64, 224, 255, 0.35);
+}
+
+.boot__bar {
+  width: min(320px, 52vw);
+  height: 2px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+
+.boot__bar > i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), #fff);
+  box-shadow: 0 0 12px var(--accent);
+  transition: width 220ms var(--ease-out);
+}
+
+.boot__status {
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  min-height: 1em;
+}
+
+/* ----------------------------------------------------------------- fatal */
+
+.fatal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  padding: 2rem;
+  background: #05070b;
+  gap: 0.5rem;
+}
+
+.fatal h1 {
+  font-family: var(--font-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 1.4rem;
+  margin: 0 0 0.4rem;
+  color: var(--danger);
+}
+
+.fatal p {
+  margin: 0;
+  max-width: 44ch;
+  color: var(--ink-dim);
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
+.fatal pre {
+  margin-top: 1.2rem;
+  max-width: 70ch;
+  max-height: 30vh;
+  overflow: auto;
+  text-align: left;
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  color: var(--ink-faint);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.8rem 1rem;
+  border-left: 2px solid var(--danger);
+}
+
+/* Shared helpers ----------------------------------------------------- */
+
+.caps {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+}
+
+.numeric {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot,
+  .boot__bar > i {
+    transition-duration: 1ms;
+  }
+}
