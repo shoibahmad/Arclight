@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>ARCLIGHT</title>
+<meta name="description" content="Anti-gravity circuit racing.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230a0e14'/><path d='M6 24 L16 7 L26 24 L16 19 Z' fill='%2340e0ff'/></svg>">
+<link rel="stylesheet" href="./styles/main.css">
+<link rel="stylesheet" href="./styles/hud.css">
+<link rel="stylesheet" href="./styles/screens.css">
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="viewport"></canvas>
+  <div id="hud" class="hud" aria-hidden="true"></div>
+  <div id="screens" class="screens"></div>
+</div>
+
+<div id="boot" class="boot">
+  <div class="boot__mark">ARCLIGHT</div>
+  <div class="boot__bar"><i id="boot-fill"></i></div>
+  <div class="boot__status" id="boot-status">initialising</div>
+</div>
+
+<noscript>
+  <div class="fatal">
+    <h1>JavaScript required</h1>
+    <p>Arclight is a real-time 3D game and needs JavaScript enabled to run.</p>
+  </div>
+</noscript>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

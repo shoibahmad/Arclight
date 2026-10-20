@@ -1,0 +1,17 @@
+{
+  "name": "arclight",
+  "version": "1.0.0",
+  "description": "Anti-gravity circuit racer built on Three.js. Runs offline with no build step and no dependencies.",
+  "type": "module",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "serve": "node tools/serve.mjs",
+    "test": "node tools/smoke-test.mjs",
+    "check": "node tools/check-imports.mjs"
+  }
+}
