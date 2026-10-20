@@ -8,7 +8,7 @@ import { roadMaterial, kerbMaterial, panelMaterial, emissiveMaterial } from '../
  * The cross-section is one continuous polyline, walked from the bottom of the
  * left barrier's outer face, up and over it, down across the road, and back up
  * and over the right barrier. Walking it in a single consistent direction
- * means every surface normal falls out of `cross(sectionDirection, tangent)`
+ * means every surface normal falls out of `cross(tangent, sectionDirection)`
  * with no per-surface sign juggling — the part of a generator like this that
  * otherwise ends up with one face lit from the wrong side.
  *
@@ -208,7 +208,7 @@ export class TrackMesh {
         a.copy(sample.right).multiplyScalar(prev.lateral).addScaledVector(sample.normal, prev.height);
         b.copy(sample.right).multiplyScalar(next.lateral).addScaledVector(sample.normal, next.height);
         sectionDir.subVectors(b, a).normalize();
-        normal.crossVectors(sectionDir, sample.tangent).normalize();
+        normal.crossVectors(sample.tangent, sectionDir).normalize();
 
         worldPoint
           .copy(sample.position)

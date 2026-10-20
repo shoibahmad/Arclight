@@ -40,7 +40,13 @@ export class TrackSample {
     this.tangent = new THREE.Vector3(0, 0, 1);
     /** Road surface normal, already banked. */
     this.normal = new THREE.Vector3(0, 1, 0);
-    /** Points to the right-hand edge of the road, already banked. */
+    /**
+     * Points to the right-hand edge of the road, already banked.
+     * right = normal x tangent, which is the genuine right in three's
+     * right-handed Y-up space. (tangent x normal gives LEFT -- easy to get
+     * backwards, and it silently mirrors the grid, the minimap and every
+     * overtaking decision the AI makes.)
+     */
     this.right = new THREE.Vector3(1, 0, 0);
     this.width = 20;
     this.bank = 0;
@@ -187,12 +193,14 @@ export class TrackPath {
       carried.normalize();
 
       s.normal.copy(carried);
-      s.right.crossVectors(s.tangent, s.normal).normalize();
+      s.right.crossVectors(s.normal, s.tangent).normalize();
 
       if (s.bank !== 0) {
+        // Positive bank banks the road into a left-hander: the right edge
+        // lifts, so the normal rotates toward the right-hand side.
         const angle = s.bank * (Math.PI / 180);
         s.normal.applyAxisAngle(s.tangent, angle).normalize();
-        s.right.crossVectors(s.tangent, s.normal).normalize();
+        s.right.crossVectors(s.normal, s.tangent).normalize();
       }
 
       s.grade = s.tangent.y;
@@ -233,7 +241,7 @@ export class TrackPath {
       const s = this.samples[i];
       const correction = (-twist * i) / n;
       s.normal.applyAxisAngle(s.tangent, correction).normalize();
-      s.right.crossVectors(s.tangent, s.normal).normalize();
+      s.right.crossVectors(s.normal, s.tangent).normalize();
     }
   }
 
@@ -301,8 +309,8 @@ export class TrackPath {
     out.tangent.lerpVectors(a.tangent, b.tangent, u).normalize();
     out.normal.lerpVectors(a.normal, b.normal, u).normalize();
     // Re-derive right from the interpolated pair so the basis stays orthogonal.
-    out.right.crossVectors(out.tangent, out.normal).normalize();
-    out.normal.crossVectors(out.right, out.tangent).normalize();
+    out.right.crossVectors(out.normal, out.tangent).normalize();
+    out.normal.crossVectors(out.tangent, out.right).normalize();
     out.width = lerp(a.width, b.width, u);
     out.bank = lerp(a.bank, b.bank, u);
     out.curvature = lerp(a.curvature, b.curvature, u);

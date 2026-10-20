@@ -163,3 +163,40 @@ test('sampleAt interpolates without denormalising the basis', () => {
     assert.ok(out.width > 5 && out.width < 40, `implausible width ${out.width}`);
   }
 });
+
+test('the frame is right-handed and right really is right', () => {
+  // A straight run heading +Z on flat ground: up is +Y, right must be +X.
+  const nodes = [
+    { position: new THREE.Vector3(0, 0, 0) },
+    { position: new THREE.Vector3(0, 0, 200) },
+    { position: new THREE.Vector3(200, 0, 300) },
+    { position: new THREE.Vector3(300, 0, 100) },
+    { position: new THREE.Vector3(200, 0, -100) },
+    { position: new THREE.Vector3(0, 0, -100) },
+  ];
+  const straight = new TrackPath(nodes, { spacing: 2 });
+  const s = straight.sampleAt(90, new TrackSample());
+
+  assert.ok(s.tangent.z > 0.95, `expected to be heading +Z, tangent=${s.tangent.toArray()}`);
+  assert.ok(s.normal.y > 0.95, `expected up to be +Y, normal=${s.normal.toArray()}`);
+  assert.ok(s.right.x > 0.95, `expected right to be +X, right=${s.right.toArray()}`);
+
+  // tangent x right = normal is the right-handed identity for this basis.
+  const check = new THREE.Vector3().crossVectors(s.tangent, s.right);
+  assert.ok(check.dot(s.normal) > 0.99, 'basis is left-handed');
+});
+
+test('pointAt with positive lateral lands on the right-hand side', () => {
+  const nodes = [
+    { position: new THREE.Vector3(0, 0, 0) },
+    { position: new THREE.Vector3(0, 0, 200) },
+    { position: new THREE.Vector3(200, 0, 300) },
+    { position: new THREE.Vector3(300, 0, 100) },
+    { position: new THREE.Vector3(200, 0, -100) },
+    { position: new THREE.Vector3(0, 0, -100) },
+  ];
+  const straight = new TrackPath(nodes, { spacing: 2 });
+  const centre = straight.pointAt(90, 0, 0, new THREE.Vector3());
+  const offset = straight.pointAt(90, 8, 0, new THREE.Vector3());
+  assert.ok(offset.x - centre.x > 7.5, 'positive lateral should move toward +X here');
+});
